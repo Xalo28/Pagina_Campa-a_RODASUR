@@ -1,0 +1,37 @@
+{
+  "name": "rodasur-descuentos",
+  "version": "1.0.0",
+  "description": "Portal de productos en descuento de RODASUR - Su Aliado Industrial",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node db/seed.js",
+    "backup": "node scripts/backup.js",
+    "dev": "node server.js",
+    "client:install": "npm --prefix client install",
+    "client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "setup": "npm install && npm --prefix client install && npm --prefix client run build && npm run seed"
+  },
+  "keywords": [
+    "rodasur",
+    "industrial",
+    "descuentos",
+    "catalogo"
+  ],
+  "author": "RODASUR",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.8.1",
+    "dotenv": "^17.4.2",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.2.0",
+    "nodemailer": "^9.0.3",
+    "sharp": "^0.35.3"
+  }
+}
