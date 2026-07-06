@@ -1,5 +1,5 @@
 // Servidor Express - Portal de descuentos RODASUR
-// Sirve el API REST + las imágenes subidas + la SPA de React (client/dist).
+// Sirve el API REST + las imágenes subidas + la SPA de React (../frontend/dist).
 const express = require('express');
 const helmet = require('helmet');
 const path = require('path');
@@ -36,8 +36,8 @@ app.use('/api/quotes', quotesRoutes);
 app.use('/api/subscribers', subscribersRoutes);
 app.use('/api/packs', packsRoutes);
 
-// Frontend React compilado (se genera con: npm run build)
-const clientDist = path.join(__dirname, 'client', 'dist');
+// Frontend React compilado (se genera con: npm run build en /frontend)
+const clientDist = path.join(__dirname, '..', 'frontend', 'dist');
 app.use(express.static(clientDist));
 
 // --- Open Graph: al compartir un producto (WhatsApp/Facebook) muestra imagen + precio ---
@@ -68,7 +68,7 @@ app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Ruta no encontrada.' });
   const indexFile = path.join(clientDist, 'index.html');
   if (!fs.existsSync(indexFile)) {
-    return res.status(503).send('<h2>Falta compilar el frontend</h2><p>Ejecuta <code>npm run build</code> (o <code>npm run client</code> para desarrollo).</p>');
+    return res.status(503).send('<h2>Falta compilar el frontend</h2><p>Desde la carpeta <code>frontend/</code> ejecuta <code>npm run build</code> (o <code>npm run dev</code> para desarrollo).</p>');
   }
   let html = fs.readFileSync(indexFile, 'utf8');
   try { html = injectOG(html, req); } catch (_) { /* si falla, sirve el html normal */ }

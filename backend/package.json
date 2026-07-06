@@ -1,18 +1,13 @@
 {
-  "name": "rodasur-descuentos",
+  "name": "rodasur-backend",
   "version": "1.0.0",
-  "description": "Portal de productos en descuento de RODASUR - Su Aliado Industrial",
+  "description": "Portal de productos en descuento de RODASUR - Su Aliado Industrial (API + servidor)",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "seed": "node db/seed.js",
-    "backup": "node scripts/backup.js",
     "dev": "node server.js",
-    "client:install": "npm --prefix client install",
-    "client": "npm --prefix client run dev",
-    "build": "npm --prefix client run build",
-    "setup": "npm install && npm --prefix client install && npm --prefix client run build && npm run seed"
+    "backup": "node scripts/backup.js"
   },
   "keywords": [
     "rodasur",
