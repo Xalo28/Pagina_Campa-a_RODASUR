@@ -42,10 +42,10 @@ app.use(express.static(clientDist));
 
 // --- Open Graph: al compartir un producto (WhatsApp/Facebook) muestra imagen + precio ---
 const esc = (s) => String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-function injectOG(html, req) {
+async function injectOG(html, req) {
   const m = /^\/product\/(\d+)/.exec(req.path);
   if (!m) return html;
-  const p = db.prepare('SELECT * FROM products WHERE id = ? AND active = 1').get(m[1]);
+  const p = await db.prepare('SELECT * FROM products WHERE id = ? AND active = 1').get(m[1]);
   if (!p) return html;
   const base = `${req.protocol}://${req.get('host')}`;
   const price = p.price_discount || p.price_regular;
@@ -64,14 +64,14 @@ function injectOG(html, req) {
 }
 
 // Fallback para el enrutado del lado del cliente (React Router)
-app.get('*', (req, res) => {
+app.get('*', async (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Ruta no encontrada.' });
   const indexFile = path.join(clientDist, 'index.html');
   if (!fs.existsSync(indexFile)) {
     return res.status(503).send('<h2>Falta compilar el frontend</h2><p>Desde la carpeta <code>frontend/</code> ejecuta <code>npm run build</code> (o <code>npm run dev</code> para desarrollo).</p>');
   }
   let html = fs.readFileSync(indexFile, 'utf8');
-  try { html = injectOG(html, req); } catch (_) { /* si falla, sirve el html normal */ }
+  try { html = await injectOG(html, req); } catch (_) { /* si falla, sirve el html normal */ }
   res.set('Content-Type', 'text/html').send(html);
 });
 
@@ -81,19 +81,26 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message || 'Error interno del servidor.' });
 });
 
-app.listen(config.PORT, () => {
-  console.log('');
-  console.log('  ╔══════════════════════════════════════════════════╗');
-  console.log('  ║   RODASUR - Portal de Descuentos (React + API)    ║');
-  console.log('  ╚══════════════════════════════════════════════════╝');
-  console.log(`  App:      http://localhost:${config.PORT}/`);
-  console.log(`  Admin:    http://localhost:${config.PORT}/admin`);
-  if (config.USING_DEFAULT_SECRETS) {
-    console.log('');
-    console.log('  ⚠  ADVERTENCIA: estás usando la contraseña y/o el JWT_SECRET por defecto.');
-    console.log('     Antes de publicar, crea un archivo .env (ver .env.example) y cámbialos.');
-  }
-  console.log(`  Correos a suscriptores: ${config.MAIL_ENABLED ? 'ACTIVADOS' : 'desactivados (configura SMTP_* en .env)'}`);
-  console.log('');
-  autoBackup(); // respaldo automático de la BD (1 vez al día)
-});
+db.init()
+  .then(() => {
+    app.listen(config.PORT, () => {
+      console.log('');
+      console.log('  ╔══════════════════════════════════════════════════╗');
+      console.log('  ║   RODASUR - Portal de Descuentos (React + API)    ║');
+      console.log('  ╚══════════════════════════════════════════════════╝');
+      console.log(`  App:      http://localhost:${config.PORT}/`);
+      console.log(`  Admin:    http://localhost:${config.PORT}/admin`);
+      if (config.USING_DEFAULT_SECRETS) {
+        console.log('');
+        console.log('  ⚠  ADVERTENCIA: estás usando la contraseña y/o el JWT_SECRET por defecto.');
+        console.log('     Antes de publicar, crea un archivo .env (ver .env.example) y cámbialos.');
+      }
+      console.log(`  Correos a suscriptores: ${config.MAIL_ENABLED ? 'ACTIVADOS' : 'desactivados (configura SMTP_* en .env)'}`);
+      console.log('');
+      autoBackup(); // respaldo automático de la BD (1 vez al día)
+    });
+  })
+  .catch((err) => {
+    console.error('[db] No se pudo inicializar la base de datos MySQL:', err.message);
+    process.exit(1);
+  });

@@ -353,7 +353,7 @@ function Panel({ onLogout }) {
 
       <main className="max-w-[1220px] mx-auto px-5 py-7 pb-16">
         {/* Pestañas */}
-        <div className="flex gap-1 mb-6 border-b border-line">
+        <div className="flex gap-1 mb-6 border-b border-line overflow-x-auto">
           {[
             ['productos', 'Productos'],
             ['packs', 'Packs'],
@@ -364,7 +364,7 @@ function Panel({ onLogout }) {
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`px-4 py-2.5 text-sm font-bold -mb-px border-b-2 transition ${tab === key ? 'border-brandred text-brandred' : 'border-transparent text-muted hover:text-navy'}`}
+              className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-bold -mb-px border-b-2 transition ${tab === key ? 'border-brandred text-brandred' : 'border-transparent text-muted hover:text-navy'}`}
             >
               {label}
             </button>

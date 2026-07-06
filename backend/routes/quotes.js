@@ -9,7 +9,7 @@ const router = express.Router();
 const STATUSES = ['nuevo', 'contactado', 'venta_concretada', 'venta_perdida'];
 
 // POST /api/quotes  -> el cliente solicita una cotización (público)
-router.post('/', publicWriteLimiter, (req, res) => {
+router.post('/', publicWriteLimiter, async (req, res) => {
   const b = req.body || {};
   // Honeypot: si un bot rellena este campo oculto, ignoramos en silencio.
   if (b.website) return res.status(201).json({ ok: true });
@@ -21,9 +21,9 @@ router.post('/', publicWriteLimiter, (req, res) => {
   if (!name) return res.status(400).json({ error: 'El nombre es obligatorio.' });
   if (!phone && !email) return res.status(400).json({ error: 'Deja un teléfono o un correo para contactarte.' });
 
-  const info = db.prepare(`
+  const info = await db.prepare(`
     INSERT INTO quotes (product_id, product_code, product_name, name, company, phone, email, message, ip)
-    VALUES (@product_id, @product_code, @product_name, @name, @company, @phone, @email, @message, @ip)
+    VALUES (:product_id, :product_code, :product_name, :name, :company, :phone, :email, :message, :ip)
   `).run({
     product_id: b.product_id ? Number(b.product_id) : null,
     product_code: (b.product_code || '').slice(0, 80) || null,
@@ -39,25 +39,25 @@ router.post('/', publicWriteLimiter, (req, res) => {
 });
 
 // GET /api/quotes  -> lista de leads (admin)
-router.get('/', requireAuth, (req, res) => {
-  const rows = db.prepare('SELECT * FROM quotes ORDER BY created_at DESC').all();
+router.get('/', requireAuth, async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM quotes ORDER BY created_at DESC').all();
   res.json(rows);
 });
 
 // PATCH /api/quotes/:id  -> cambia el estado (admin). Para "venta_perdida" guarda la razón.
-router.patch('/:id', requireAuth, (req, res) => {
+router.patch('/:id', requireAuth, async (req, res) => {
   const status = (req.body?.status || '').trim();
   if (!STATUSES.includes(status)) return res.status(400).json({ error: 'Estado inválido.' });
   // La razón solo aplica a ventas perdidas; en otros estados se limpia.
   const lostReason = status === 'venta_perdida' ? (req.body?.lost_reason || '').trim().slice(0, 500) : null;
-  const r = db.prepare('UPDATE quotes SET status = ?, lost_reason = ? WHERE id = ?').run(status, lostReason, req.params.id);
+  const r = await db.prepare('UPDATE quotes SET status = ?, lost_reason = ? WHERE id = ?').run(status, lostReason, req.params.id);
   if (!r.changes) return res.status(404).json({ error: 'Cotización no encontrada.' });
   res.json({ ok: true });
 });
 
 // DELETE /api/quotes/:id  (admin)
-router.delete('/:id', requireAuth, (req, res) => {
-  db.prepare('DELETE FROM quotes WHERE id = ?').run(req.params.id);
+router.delete('/:id', requireAuth, async (req, res) => {
+  await db.prepare('DELETE FROM quotes WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 

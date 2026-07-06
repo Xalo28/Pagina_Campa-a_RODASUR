@@ -14,8 +14,15 @@ module.exports = {
   ADMIN_USER: process.env.ADMIN_USER || 'admin',
   ADMIN_PASSWORD,
 
-  DB_PATH: process.env.DB_PATH || path.join(__dirname, 'data', 'rodasur.db'),
+  DB: {
+    host: process.env.DB_HOST || 'localhost',
+    port: Number(process.env.DB_PORT || 3306),
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    name: process.env.DB_NAME || 'rodasur',
+  },
   UPLOAD_DIR: path.join(__dirname, 'public', 'uploads'),
+  BACKUP_DIR: path.join(__dirname, 'data', 'backups'),
 
   // ¿Se están usando los valores por defecto? (para avisar al arrancar)
   USING_DEFAULT_SECRETS:

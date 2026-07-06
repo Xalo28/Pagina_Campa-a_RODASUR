@@ -106,7 +106,7 @@ function removeUploaded(urls) {
 // =================== RUTAS PÚBLICAS ===================
 
 // GET /api/products  -> lista (soporta ?brand= &category= &search= &discount=1 &all=1)
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const { brand, category, search, discount, all } = req.query;
   const where = [];
   const params = {};
@@ -114,31 +114,31 @@ router.get('/', (req, res) => {
   // Por defecto, el cliente solo ve productos activos.
   if (all !== '1') where.push('active = 1');
   if (discount === '1') where.push('on_discount = 1');
-  if (brand) { where.push('brand = @brand'); params.brand = brand; }
-  if (category) { where.push('category = @category'); params.category = category; }
+  if (brand) { where.push('brand = :brand'); params.brand = brand; }
+  if (category) { where.push('category = :category'); params.category = category; }
   if (search) {
-    where.push('(LOWER(name) LIKE @q OR LOWER(code) LIKE @q OR LOWER(description) LIKE @q OR LOWER(brand) LIKE @q)');
+    where.push('(LOWER(name) LIKE :q OR LOWER(code) LIKE :q OR LOWER(description) LIKE :q OR LOWER(brand) LIKE :q)');
     params.q = '%' + String(search).toLowerCase() + '%';
   }
 
   const sql = 'SELECT * FROM products'
     + (where.length ? ' WHERE ' + where.join(' AND ') : '')
     + ' ORDER BY category, name';
-  const rows = db.prepare(sql).all(params).map(parseRow);
+  const rows = (await db.prepare(sql).all(params)).map(parseRow);
   res.json(rows);
 });
 
 // GET /api/products/meta -> marcas y categorías disponibles + totales
-router.get('/meta', (req, res) => {
-  const brands = db.prepare("SELECT DISTINCT brand FROM products WHERE brand <> '' ORDER BY brand").all().map(r => r.brand);
-  const categories = db.prepare("SELECT DISTINCT category FROM products WHERE category <> '' ORDER BY category").all().map(r => r.category);
-  const total = db.prepare('SELECT COUNT(*) AS n FROM products WHERE active = 1').get().n;
+router.get('/meta', async (req, res) => {
+  const brands = (await db.prepare("SELECT DISTINCT brand FROM products WHERE brand <> '' ORDER BY brand").all()).map(r => r.brand);
+  const categories = (await db.prepare("SELECT DISTINCT category FROM products WHERE category <> '' ORDER BY category").all()).map(r => r.category);
+  const total = (await db.prepare('SELECT COUNT(*) AS n FROM products WHERE active = 1').get()).n;
   res.json({ brands, categories, total });
 });
 
 // GET /api/products/:id -> detalle
-router.get('/:id', (req, res) => {
-  const row = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+router.get('/:id', async (req, res) => {
+  const row = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Producto no encontrado.' });
   res.json(parseRow(row));
 });
@@ -152,20 +152,20 @@ router.post('/', requireAuth, uploadGallery, async (req, res) => {
   if (!p.code || !p.name) {
     return res.status(400).json({ error: 'El código y el nombre son obligatorios.' });
   }
-  const exists = db.prepare('SELECT id FROM products WHERE code = ?').get(p.code);
+  const exists = await db.prepare('SELECT id FROM products WHERE code = ?').get(p.code);
   if (exists) {
     return res.status(409).json({ error: `Ya existe un producto con el código "${p.code}".` });
   }
   try {
-    const info = db.prepare(`
+    const info = await db.prepare(`
       INSERT INTO products
         (code, name, brand, category, description, features, specs,
          price_regular, price_discount, image, images, stock, on_discount, active, valid_until)
       VALUES
-        (@code, @name, @brand, @category, @description, @features, @specs,
-         @price_regular, @price_discount, @image, @images, @stock, @on_discount, @active, @valid_until)
+        (:code, :name, :brand, :category, :description, :features, :specs,
+         :price_regular, :price_discount, :image, :images, :stock, :on_discount, :active, :valid_until)
     `).run(p);
-    const row = db.prepare('SELECT * FROM products WHERE id = ?').get(info.lastInsertRowid);
+    const row = await db.prepare('SELECT * FROM products WHERE id = ?').get(info.lastInsertRowid);
     res.status(201).json(parseRow(row));
   } catch (err) {
     res.status(500).json({ error: 'No se pudo crear el producto: ' + err.message });
@@ -174,7 +174,7 @@ router.post('/', requireAuth, uploadGallery, async (req, res) => {
 
 // PUT /api/products/:id -> actualizar
 router.put('/:id', requireAuth, uploadGallery, async (req, res) => {
-  const current = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+  const current = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!current) return res.status(404).json({ error: 'Producto no encontrado.' });
 
   await optimizeUploads(req.files);
@@ -182,18 +182,18 @@ router.put('/:id', requireAuth, uploadGallery, async (req, res) => {
   if (!p.code || !p.name) {
     return res.status(400).json({ error: 'El código y el nombre son obligatorios.' });
   }
-  const clash = db.prepare('SELECT id FROM products WHERE code = ? AND id <> ?').get(p.code, req.params.id);
+  const clash = await db.prepare('SELECT id FROM products WHERE code = ? AND id <> ?').get(p.code, req.params.id);
   if (clash) {
     return res.status(409).json({ error: `Ya existe otro producto con el código "${p.code}".` });
   }
   try {
-    db.prepare(`
+    await db.prepare(`
       UPDATE products SET
-        code=@code, name=@name, brand=@brand, category=@category, description=@description,
-        features=@features, specs=@specs, price_regular=@price_regular, price_discount=@price_discount,
-        image=@image, images=@images, stock=@stock, on_discount=@on_discount, active=@active, valid_until=@valid_until,
-        updated_at=datetime('now')
-      WHERE id=@id
+        code=:code, name=:name, brand=:brand, category=:category, description=:description,
+        features=:features, specs=:specs, price_regular=:price_regular, price_discount=:price_discount,
+        image=:image, images=:images, stock=:stock, on_discount=:on_discount, active=:active, valid_until=:valid_until,
+        updated_at=NOW()
+      WHERE id=:id
     `).run({ ...p, id: Number(req.params.id) });
     // Limpia archivos que quedaron fuera de la galería
     let oldImages = [];
@@ -203,7 +203,7 @@ router.put('/:id', requireAuth, uploadGallery, async (req, res) => {
     try { newImages = JSON.parse(p.images || '[]'); } catch (_) {}
     removeUploaded(oldImages.filter((u) => !newImages.includes(u)));
 
-    const row = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+    const row = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
     res.json(parseRow(row));
   } catch (err) {
     res.status(500).json({ error: 'No se pudo actualizar: ' + err.message });
@@ -211,10 +211,10 @@ router.put('/:id', requireAuth, uploadGallery, async (req, res) => {
 });
 
 // DELETE /api/products/:id -> eliminar
-router.delete('/:id', requireAuth, (req, res) => {
-  const current = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+router.delete('/:id', requireAuth, async (req, res) => {
+  const current = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!current) return res.status(404).json({ error: 'Producto no encontrado.' });
-  db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
+  await db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
   // Borra las imágenes subidas (no toca los flyers precargados en /uploads)
   let gallery = [];
   try { gallery = JSON.parse(current.images || '[]'); } catch (_) {}

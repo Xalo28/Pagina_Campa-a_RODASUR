@@ -6,13 +6,13 @@ const { requireAuth } = require('../middleware/auth');
 const router = express.Router();
 
 // Expande un pack: incluye los productos y calcula el ahorro frente a comprarlos por separado.
-function parsePack(row) {
+async function parsePack(row) {
   if (!row) return row;
   let ids = [];
   try { ids = JSON.parse(row.product_ids || '[]'); } catch (_) {}
 
   const getProduct = db.prepare('SELECT id, name, code, brand, image, price_regular, price_discount FROM products WHERE id = ?');
-  const products = ids.map((id) => getProduct.get(id)).filter(Boolean);
+  const products = (await Promise.all(ids.map((id) => getProduct.get(id)))).filter(Boolean);
 
   const sumIndividual = products.reduce((s, p) => s + (p.price_discount || p.price_regular || 0), 0);
   const pricePack = row.price_pack || 0;
@@ -38,49 +38,51 @@ function buildPayload(body) {
 }
 
 // GET /api/packs  (público: solo activos; ?all=1 para el admin)
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const all = req.query.all === '1';
-  const rows = db.prepare(`SELECT * FROM packs ${all ? '' : 'WHERE active = 1'} ORDER BY created_at DESC`).all();
-  res.json(rows.map(parsePack));
+  const rows = await db.prepare(`SELECT * FROM packs ${all ? '' : 'WHERE active = 1'} ORDER BY created_at DESC`).all();
+  res.json(await Promise.all(rows.map(parsePack)));
 });
 
 // GET /api/packs/:id
-router.get('/:id', (req, res) => {
-  const row = db.prepare('SELECT * FROM packs WHERE id = ?').get(req.params.id);
+router.get('/:id', async (req, res) => {
+  const row = await db.prepare('SELECT * FROM packs WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Pack no encontrado.' });
-  res.json(parsePack(row));
+  res.json(await parsePack(row));
 });
 
 // POST /api/packs  (admin)
-router.post('/', requireAuth, (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   const p = buildPayload(req.body);
   if (!p.name) return res.status(400).json({ error: 'El nombre del pack es obligatorio.' });
   if (p._count < 2) return res.status(400).json({ error: 'Un pack debe incluir al menos 2 productos.' });
-  const info = db.prepare(`
+  const info = await db.prepare(`
     INSERT INTO packs (name, description, product_ids, price_pack, image, active)
-    VALUES (@name, @description, @product_ids, @price_pack, @image, @active)
+    VALUES (:name, :description, :product_ids, :price_pack, :image, :active)
   `).run(p);
-  res.status(201).json(parsePack(db.prepare('SELECT * FROM packs WHERE id = ?').get(info.lastInsertRowid)));
+  const row = await db.prepare('SELECT * FROM packs WHERE id = ?').get(info.lastInsertRowid);
+  res.status(201).json(await parsePack(row));
 });
 
 // PUT /api/packs/:id  (admin)
-router.put('/:id', requireAuth, (req, res) => {
-  const current = db.prepare('SELECT * FROM packs WHERE id = ?').get(req.params.id);
+router.put('/:id', requireAuth, async (req, res) => {
+  const current = await db.prepare('SELECT * FROM packs WHERE id = ?').get(req.params.id);
   if (!current) return res.status(404).json({ error: 'Pack no encontrado.' });
   const p = buildPayload(req.body);
   if (!p.name) return res.status(400).json({ error: 'El nombre del pack es obligatorio.' });
   if (p._count < 2) return res.status(400).json({ error: 'Un pack debe incluir al menos 2 productos.' });
-  db.prepare(`
-    UPDATE packs SET name=@name, description=@description, product_ids=@product_ids,
-      price_pack=@price_pack, image=@image, active=@active, updated_at=datetime('now')
-    WHERE id=@id
+  await db.prepare(`
+    UPDATE packs SET name=:name, description=:description, product_ids=:product_ids,
+      price_pack=:price_pack, image=:image, active=:active, updated_at=NOW()
+    WHERE id=:id
   `).run({ ...p, id: Number(req.params.id) });
-  res.json(parsePack(db.prepare('SELECT * FROM packs WHERE id = ?').get(req.params.id)));
+  const row = await db.prepare('SELECT * FROM packs WHERE id = ?').get(req.params.id);
+  res.json(await parsePack(row));
 });
 
 // DELETE /api/packs/:id  (admin)
-router.delete('/:id', requireAuth, (req, res) => {
-  const r = db.prepare('DELETE FROM packs WHERE id = ?').run(req.params.id);
+router.delete('/:id', requireAuth, async (req, res) => {
+  const r = await db.prepare('DELETE FROM packs WHERE id = ?').run(req.params.id);
   if (!r.changes) return res.status(404).json({ error: 'Pack no encontrado.' });
   res.json({ ok: true });
 });

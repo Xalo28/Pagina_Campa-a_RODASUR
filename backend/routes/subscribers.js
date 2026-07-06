@@ -9,7 +9,7 @@ const router = express.Router();
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // POST /api/subscribers  -> alta pública { name, email, phone }
-router.post('/', publicWriteLimiter, (req, res) => {
+router.post('/', publicWriteLimiter, async (req, res) => {
   if (req.body?.website) return res.json({ ok: true }); // honeypot anti-bots
   const name = (req.body?.name || '').trim().slice(0, 120);
   const email = (req.body?.email || '').trim().toLowerCase().slice(0, 160);
@@ -21,10 +21,10 @@ router.post('/', publicWriteLimiter, (req, res) => {
     return res.status(400).json({ error: 'Ingresa un correo electrónico válido.' });
   }
 
-  const existing = db.prepare('SELECT id FROM subscribers WHERE email = ?').get(email);
+  const existing = await db.prepare('SELECT id FROM subscribers WHERE email = ?').get(email);
   if (existing) {
     // Reactiva y actualiza datos si vuelve a suscribirse
-    db.prepare(`UPDATE subscribers SET
+    await db.prepare(`UPDATE subscribers SET
         name = COALESCE(NULLIF(?, ''), name),
         phone = COALESCE(NULLIF(?, ''), phone),
         company = COALESCE(NULLIF(?, ''), company),
@@ -34,20 +34,20 @@ router.post('/', publicWriteLimiter, (req, res) => {
     return res.json({ ok: true, already: true, message: '¡Ya estabas suscrito! Actualizamos tus datos.' });
   }
 
-  db.prepare('INSERT INTO subscribers (name, email, phone, company, position) VALUES (?, ?, ?, ?, ?)')
+  await db.prepare('INSERT INTO subscribers (name, email, phone, company, position) VALUES (?, ?, ?, ?, ?)')
     .run(name || null, email, phone || null, company || null, position || null);
   res.status(201).json({ ok: true, message: '¡Listo! Te avisaremos de nuevas campañas y descuentos.' });
 });
 
 // GET /api/subscribers  -> lista (protegido)
-router.get('/', requireAuth, (req, res) => {
-  const rows = db.prepare('SELECT * FROM subscribers ORDER BY created_at DESC').all();
+router.get('/', requireAuth, async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM subscribers ORDER BY created_at DESC').all();
   res.json(rows);
 });
 
 // DELETE /api/subscribers/:id  -> eliminar (protegido)
-router.delete('/:id', requireAuth, (req, res) => {
-  const info = db.prepare('DELETE FROM subscribers WHERE id = ?').run(req.params.id);
+router.delete('/:id', requireAuth, async (req, res) => {
+  const info = await db.prepare('DELETE FROM subscribers WHERE id = ?').run(req.params.id);
   if (!info.changes) return res.status(404).json({ error: 'Suscriptor no encontrado.' });
   res.json({ ok: true });
 });
@@ -65,7 +65,7 @@ router.post('/campaign', requireAuth, async (req, res) => {
   if (!mailEnabled()) {
     return res.status(400).json({ error: 'El envío de correos no está configurado. Define SMTP_* en el archivo .env.' });
   }
-  const emails = db.prepare('SELECT email FROM subscribers WHERE active = 1').all().map((r) => r.email);
+  const emails = (await db.prepare('SELECT email FROM subscribers WHERE active = 1').all()).map((r) => r.email);
   if (!emails.length) return res.status(400).json({ error: 'No hay suscriptores a quién enviar.' });
 
   const safe = message.replace(/</g, '&lt;').replace(/\n/g, '<br>');
